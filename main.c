@@ -1,73 +1,74 @@
 #include "monty.h"
+#include "lists.h"
+
+data_t data = DATA_INIT;
 
 /**
- * error_usage - prints usage message and exits*
- * Return: Nothing
+ * monty - helper function for main function
+ * @args: pointer to struct of arguments from main
+ *
+ * Description: opens and reads from the file
+ * containing the opcodes, and calls the function
+ * that will find the corresponding executing function
  */
-
-void error_usage(void)
+void monty(args_t *args)
 {
-	fprintf(stderr, "USAGE: monty file\n");
-	exit(EXIT_FAILURE);
-}
+	size_t len = 0;
+	int get = 0;
+	void (*code_func)(stack_t **, unsigned int);
 
-/**
- * file_error - prints file error message and exits
- * @argv: argument vector
- * Return: Nothing
- */
-void file_error(char *argv)
-{
-	fprintf(stderr, "Error: Can't open file %s\n", argv);
-	exit(EXIT_FAILURE);
-}
-
-int status = 0;
-/**
- * main - entry point
- * @argv: argument vector
- * @argc: argument counter
- * Return: Nothing
- */
-int main(int argc, char **argv)
-{
-	FILE *fop;
-	size_t buf_size = 0;
-	char *buffer = NULL;
-	char *str = NULL;
-	stack_t *stack = NULL;
-	unsigned int count = 1;
-
-	global.data = 1;
-	if (argc != 2)
-		error_usage();
-
-	fop = fopen(argv[1], "r");
-
-	if (!fop)
-		file_error(argv[1]);
-
-	while (getline(&buffer, &buf_size, fop) != -1)
+	if (args->ac != 2)
 	{
-		if (status)
-			break;
-		if (*buffer == '\n')
-		{
-			count++;
-			continue;
-		}
-		str = strtok(buffer, " \t\n $");
-		if (!str || *str == '$')
-		{
-			count++;
-			continue;
-		}
-		global.args = strtok(NULL, " \t\n $");
-		opcode(&stack, str, count);
-		count++;
+		dprintf(STDERR_FILENO, USAGE);
+		exit(EXIT_FAILURE);
 	}
-	free(buffer);
-	free_stack(stack);
-	fclose(fop);
-	exit(status);
+	data.fptr = fopen(args->av, "r");
+	if (!data.fptr)
+	{
+		dprintf(STDERR_FILENO, FILE_ERROR, args->av);
+		exit(EXIT_FAILURE);
+	}
+	while (1)
+	{
+		args->line_number++;
+		get = getline(&(data.line), &len, data.fptr);
+		if (get < 0)
+			break;
+		data.words = strtow(data.line);
+		if (data.words[0] == NULL || data.words[0][0] == '#')
+		{
+			free_all(0);
+			continue;
+		}
+		code_func = get_func(data.words);
+		if (!code_func)
+		{
+			dprintf(STDERR_FILENO, UNKNOWN, args->line_number, data.words[0]);
+			free_all(1);
+			exit(EXIT_FAILURE);
+		}
+		code_func(&(data.stack), args->line_number);
+		free_all(0);
+	}
+	free_all(1);
+}
+
+/**
+ * main - entry point for monty bytecode interpreter
+ * @argc: number of arguments
+ * @argv: array of arguments
+ *
+ * Return: EXIT_SUCCESS or EXIT_FAILURE
+ */
+int main(int argc, char *argv[])
+{
+	args_t args;
+
+	args.av = argv[1];
+	args.ac = argc;
+	args.line_number = 0;
+
+	monty(&args);
+
+	return (EXIT_SUCCESS);
 }
